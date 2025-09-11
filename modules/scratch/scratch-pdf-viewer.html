@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>Scratch 數學教材預覽模組 / Scratch PDF Viewer</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      line-height: 1.6;
+      padding: 1em;
+      background-color: #f9f9f9;
+    }
+    .section {
+      margin-bottom: 2em;
+    }
+    .file-zone, .preview-zone, .pdf-zone {
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      padding: 1em;
+      background-color: #fff;
+    }
+    .file-zone input {
+      margin-top: 0.5em;
+    }
+    #selectedFiles {
+      margin-top: 0.5em;
+      color: #555;
+      font-size: 0.95em;
+    }
+    h2, h4 {
+      margin-top: 0;
+      color: #333;
+    }
+    ul {
+      padding-left: 1.2em;
+    }
+    a {
+      color: #0077cc;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    canvas {
+      border: 1px solid #ccc;
+      max-width: 100%;
+    }
+    .controls {
+      margin-top: 1em;
+    }
+    .controls button {
+      margin-right: 1em;
+    }
+    #pageInfo {
+      font-weight: bold;
+      color: #444;
+    }
+    .back-link {
+      display: inline-block;
+      margin-top: 2em;
+      padding: 0.5em 1em;
+      background-color: #0077cc;
+      color: #fff;
+      text-decoration: none;
+      border-radius: 4px;
+    }
+    .back-link:hover {
+      background-color: #005fa3;
+    }
+  </style>
+</head>
+<body>
+
+  <div style="background-color:#e3f2fd; padding:1.5em; border-radius:8px; margin-bottom:2em;">
+    <h2>🧠 Scratch 數學模組 / Scratch Math Module</h2>
+    <p style="color:#444;">
+      本模組提供 Scratch 數學教材的 PDF 多頁預覽功能，支援本地檔案選擇與頁面切換。<br>
+      適合教師、學生與教材設計者快速瀏覽與測試教材內容。
+    </p>
+  </div>
+
+  <div class="section file-zone">
+    <h4>📂 選擇 PDF 檔案（可多選）</h4>
+    <input type="file" id="fileInput" multiple accept=".pdf">
+    <div id="selectedFiles">尚未選擇檔案。</div>
+  </div>
+
+  <div class="section preview-zone" id="fileListContainer">
+    <h4>📋 檔案清單 / File List</h4>
+    <p>尚未選擇檔案。</p>
+  </div>
+
+  <div class="section pdf-zone">
+    <h4>📖 PDF 預覽 / Preview</h4>
+    <canvas id="pdfCanvas"></canvas>
+    <div class="controls">
+      <button onclick="goToPage(currentPage - 1)">⬅️ 上一頁</button>
+      <button onclick="goToPage(currentPage + 1)">➡️ 下一頁</button>
+      <span id="pageInfo">第 0 頁 / 共 0 頁</span>
+    </div>
+  </div>
+
+  <a class="back-link" href="../../index.html">⬅️ 返回首頁 / Back to Home</a>
+
+  <div style="margin-top:3em;">
+    <h4>🔧 Scratch 互動教材（尚未嵌入）</h4>
+    <p style="color:#888;">此區塊將提供 Scratch 專案嵌入或連結，敬請期待。</p>
+  </div>
+
+  <script>
+    const fileInput = document.getElementById('fileInput');
+    const selectedFilesDisplay = document.getElementById('selectedFiles');
+    const fileListContainer = document.getElementById('fileListContainer');
+    const pdfCanvas = document.getElementById('pdfCanvas');
+    const pdfContext = pdfCanvas.getContext('2d');
+    const pageInfo = document.getElementById('pageInfo');
+
+    let fileStore = {};
+    let currentPDF = null;
+    let currentPage = 1;
+    let totalPages = 0;
+
+    fileInput.addEventListener('change', function (event) {
+      const files = Array.from(event.target.files);
+      selectedFilesDisplay.textContent = files.map(f => f.name).join(', ') || '尚未選擇檔案。';
+
+      let list = fileListContainer.querySelector('ul');
+      if (!list) {
+        list = document.createElement('ul');
+        fileListContainer.innerHTML = '<h4>📋 檔案清單 / File List</h4>';
+        fileListContainer.appendChild(list);
+      }
+
+      files.forEach(file => {
+        if (!fileStore[file.name]) {
+          fileStore[file.name] = file;
+          const item = document.createElement('li');
+          const link = document.createElement('a');
+          link.href = '#';
+          link.textContent = file.name;
+          link.onclick = () => previewPDF(file.name);
+          item.appendChild(link);
+          list.appendChild(item);
+        }
+      });
+    });
+
+    function previewPDF(filename) {
+      const file = fileStore[filename];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        const typedarray = new Uint8Array(e.target.result);
+        pdfjsLib.getDocument(typedarray).promise.then(pdf => {
+          currentPDF = pdf;
+          totalPages = pdf.numPages;
+          currentPage = 1;
+          goToPage(currentPage);
+        });
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function goToPage(pageNum) {
+      if (!currentPDF || pageNum < 1 || pageNum > totalPages) return;
+      currentPDF.getPage(pageNum).then(page => {
+        const viewport = page.getViewport({ scale: 1.5 });
+        pdfCanvas.height = viewport.height;
+        pdfCanvas.width = viewport.width;
+        page.render({ canvasContext: pdfContext, viewport: viewport });
+        pageInfo.textContent = `第 ${pageNum} 頁 / 共 ${totalPages} 頁`;
+        currentPage = pageNum;
+      });
+    }
+  </script>
+
+</body>
+</html>
